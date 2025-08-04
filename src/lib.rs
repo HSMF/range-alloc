@@ -57,6 +57,31 @@ pub mod tests {
         a.free(y, 4096).expect("can free again");
     }
 
+    pub fn alloc_different_configurations(a: &mut RangeAllocator<()>) {
+        const N: usize = 50;
+
+        let sizes = [10, 3, 5, 6, 2, 9, 1, 4, 8, 7].map(|x| x * 4096);
+        let alignments = [8, 2, 9, 1, 3, 0, 6, 5, 7].map(|x| 4096 << x);
+
+        let mut sizes = sizes.iter().copied().cycle();
+        let mut alignments = alignments.iter().copied().cycle();
+
+        let mut positions = [(0, 0); N];
+
+        for pos in positions.iter_mut() {
+            let size = sizes.next().unwrap();
+            let (_, x) = a
+                .alloc(size, alignments.next().unwrap())
+                .expect("can allocate");
+
+            *pos = (x, size);
+        }
+
+        for pos in positions {
+            a.free(pos.0, pos.1).expect("can free");
+        }
+    }
+
     #[test]
     fn simple() {
         let mut allocator: RangeAllocator<()> = RangeAllocator::new();
@@ -94,5 +119,11 @@ pub mod tests {
     fn alloc_2_aligned() {
         let mut a = setup();
         tests::alloc_aligned(&mut a);
+    }
+
+    #[test]
+    fn test_alloc_different_configurations() {
+        let mut a = setup();
+        tests::alloc_different_configurations(&mut a);
     }
 }

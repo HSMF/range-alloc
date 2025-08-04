@@ -26,6 +26,12 @@ fn repeatedly_alloc_page(c: &mut Criterion) {
             tests::alloc_aligned(&mut a);
         })
     });
+
+    c.bench_function("alloc_different_configurations", |b| {
+        b.iter(|| {
+            tests::alloc_different_configurations(&mut a);
+        });
+    });
 }
 
 criterion_group!(benches, repeatedly_alloc_page);
