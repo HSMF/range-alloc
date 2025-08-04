@@ -288,6 +288,7 @@ name = "range-alloc"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "log",
  "tinyvec",
 ]
 

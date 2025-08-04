@@ -1,9 +1,12 @@
-use std::{ops::Range, ptr::NonNull};
+use std::{marker::PhantomData, ops::Range, ptr::NonNull};
+
+use log::trace;
 
 use crate::{Error, Result, round_up};
 
 pub const BASE_PAGE_SIZE: usize = 4096;
 
+#[derive(Debug)]
 struct Node<Tag> {
     tag: Tag,
     base: usize,
@@ -76,6 +79,7 @@ impl<'a, T> Iterator for NodeIter<'a, T> {
 pub struct RangeAllocator<Tag> {
     head: Option<NonNull<Node<Tag>>>,
     mem_regions: Option<NonNull<Node<Tag>>>,
+    _data: PhantomData<Tag>,
 }
 
 impl<T> RangeAllocator<T> {
@@ -83,6 +87,7 @@ impl<T> RangeAllocator<T> {
         RangeAllocator {
             head: None,
             mem_regions: None,
+            _data: PhantomData,
         }
     }
 }
@@ -91,13 +96,16 @@ macro_rules! insert_to_list {
     ($this:expr, $list:ident,
             $base:expr, $size:expr,
             $tag: expr) => {{
-        let new_first = $this.pin(Node {
-            tag: $tag,
-            base: $base,
-            size: $size,
-            next: $this.$list,
-            prev: None,
-        });
+        let new_first = pin!(
+            $this,
+            Node {
+                tag: $tag,
+                base: $base,
+                size: $size,
+                next: $this.$list,
+                prev: None,
+            }
+        );
         if let Some(mut old_first) = $this.$list {
             unsafe { old_first.as_mut().prev = Some(new_first) };
         }
@@ -110,11 +118,31 @@ macro_rules! remove_from_list {
         let node = $node;
         let new_head = node.unlink();
         let node = NonNull::from(node);
-        $this.release(node);
+        release!($this, node);
         if let Some(head) = new_head {
             $this.$list = head;
         }
     }};
+}
+
+fn pin<Tag>(n: Node<Tag>) -> NonNull<Node<Tag>> {
+    unsafe { NonNull::new_unchecked(Box::into_raw(Box::new(n))) }
+}
+
+unsafe fn release<Tag>(n: NonNull<Node<Tag>>) {
+    unsafe { drop(Box::from_raw(n.as_ptr())) };
+}
+
+macro_rules! pin {
+    ($this:expr, $n:expr) => {
+        pin($n)
+    };
+}
+
+macro_rules! release {
+    ($this:expr, $n:expr) => {
+        unsafe { release($n) }
+    };
 }
 
 impl<Tag> RangeAllocator<Tag> {
@@ -135,16 +163,6 @@ impl<Tag> RangeAllocator<Tag> {
             node: self.mem_regions.map(|x| unsafe { x.as_ref() }),
         }
     }
-
-    #[track_caller]
-    fn pin(&self, n: Node<Tag>) -> NonNull<Node<Tag>> {
-        unsafe { NonNull::new_unchecked(Box::into_raw(Box::new(n))) }
-    }
-
-    #[track_caller]
-    fn release(&self, n: NonNull<Node<Tag>>) {
-        unsafe { drop(Box::from_raw(n.as_ptr())) };
-    }
 }
 
 impl<Tag> RangeAllocator<Tag>
@@ -154,7 +172,7 @@ where
     /// adds a range to the allocator from which the allocator may pick
     pub fn add_range(&mut self, base: usize, size: usize, range_tag: Tag) -> Result<()> {
         assert!(size > 0);
-        eprintln!("add_range {base}:{size}");
+        trace!("add_range {base}:{size}");
         if self
             .iter_mut()
             .any(|x| overlaps(x.range(), base..base + size))
@@ -170,7 +188,7 @@ where
 
     /// allocates a range. The range will not be handed out again until it has been freed
     pub fn alloc(&mut self, min_size: usize, alignment: usize) -> Result<(Tag, usize)> {
-        eprintln!(
+        trace!(
             "allocate: {min_size} {alignment} currently have space: {}",
             self.space()
         );
@@ -249,18 +267,16 @@ where
             (Some(before), Some(after)) => {
                 candidate.base = before.0;
                 candidate.size = before.1 - before.0;
-                let tag = candidate.tag.clone();
-                let mut candidate = NonNull::from(candidate);
 
-                let new = self.pin(Node {
-                    tag,
-                    base: after.0,
-                    size: after.1 - after.0,
-                    next: Some(candidate),
-                    prev: None,
-                });
-
-                unsafe { candidate.as_mut().prev = Some(new) };
+                // TODO: insert before `candidate`
+                // I haven't been able to do so without breaking stacked borrows
+                insert_to_list!(
+                    self,
+                    head,
+                    after.0,
+                    after.1 - after.0,
+                    candidate.tag.clone()
+                );
 
                 (allocated_start, after_allocated - allocated_start)
             }
@@ -323,6 +339,40 @@ where
 
     pub fn space(&self) -> usize {
         self.iter().map(|x| x.size).sum()
+    }
+}
+
+impl<Tag> RangeAllocator<Tag> {
+    pub fn print_nodes(&self) {
+        for node @ Node {
+            tag,
+            base,
+            size,
+            next,
+            prev,
+        } in self.iter()
+        {
+            eprintln!(
+                "Node@{addr:?}: {base:x}:{size} prev:{prev:?} next:{next:?}",
+                addr = node as *const _
+            );
+        }
+    }
+
+    pub fn print_parents(&self) {
+        for node @ Node {
+            tag,
+            base,
+            size,
+            next,
+            prev,
+        } in self.parent_iter()
+        {
+            eprintln!(
+                "Parent@{addr:?}: {base:x}:{size} prev:{prev:?} next:{next:?}",
+                addr = node as *const _
+            );
+        }
     }
 }
 

@@ -33,9 +33,29 @@ macro_rules! round_up {
     }};
 }
 
-#[cfg(test)]
-mod tests {
+// #[cfg(test)]
+pub mod tests {
+    use std::hint::black_box;
+
     use super::*;
+
+    pub fn setup() -> RangeAllocator<()> {
+        let mut a: RangeAllocator<()> = RangeAllocator::new();
+        a.add_range(0x7ff000, 4096 * 4096, ())
+            .expect("can add range");
+
+        a.add_range(0xfff0000, 4096 * 128, ())
+            .expect("can add range");
+
+        a
+    }
+
+    pub fn alloc_aligned(a: &mut RangeAllocator<()>) {
+        let (_, x) = a.alloc(black_box(4096), 4096 * 4096).expect("can allocate");
+        let (_, y) = a.alloc(black_box(4096), 4096 * 4096).expect("can allocate");
+        a.free(x, 4096).expect("can free again");
+        a.free(y, 4096).expect("can free again");
+    }
 
     #[test]
     fn simple() {
@@ -68,5 +88,11 @@ mod tests {
         for base in x {
             allocator.free(base, 4096).expect("can free");
         }
+    }
+
+    #[test]
+    fn alloc_2_aligned() {
+        let mut a = setup();
+        tests::alloc_aligned(&mut a);
     }
 }
