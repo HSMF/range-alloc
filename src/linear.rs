@@ -2,7 +2,7 @@ use std::{marker::PhantomData, ops::Range, ptr::NonNull};
 
 use log::trace;
 
-use crate::{Error, Result, round_up};
+use crate::{Error, RangeAlloc, Result, round_up};
 
 pub const BASE_PAGE_SIZE: usize = 4096;
 
@@ -169,8 +169,17 @@ impl<Tag> RangeAllocator<Tag>
 where
     Tag: Default + Clone,
 {
+    /// allocates a range at the given base address. Fails if that address is already allocated.
+    pub fn alloc_fixed(&mut self, base: usize, size: usize) -> Result<(Tag, usize)> {
+        Err(Error::unimplemented())
+    }
+}
+
+impl<Tag: Clone> RangeAlloc for RangeAllocator<Tag> {
+    type Tag = Tag;
+
     /// adds a range to the allocator from which the allocator may pick
-    pub fn add_range(&mut self, base: usize, size: usize, range_tag: Tag) -> Result<()> {
+    fn add_range(&mut self, base: usize, size: usize, range_tag: Tag) -> Result<()> {
         assert!(size > 0);
         trace!("add_range {base}:{size}");
         if self
@@ -187,7 +196,7 @@ where
     }
 
     /// allocates a range. The range will not be handed out again until it has been freed
-    pub fn alloc(&mut self, min_size: usize, alignment: usize) -> Result<(Tag, usize)> {
+    fn alloc(&mut self, min_size: usize, alignment: usize) -> Result<(Tag, usize)> {
         trace!(
             "allocate: {min_size} {alignment} currently have space: {}",
             self.space()
@@ -284,13 +293,9 @@ where
 
         Ok((tag, addr))
     }
-    /// allocates a range at the given base address. Fails if that address is already allocated.
-    pub fn alloc_fixed(&mut self, base: usize, size: usize) -> Result<(Tag, usize)> {
-        Err(Error::unimplemented())
-    }
 
     /// frees a previously handed out range
-    pub fn free(&mut self, base: usize, size: usize) -> Result<()> {
+    fn free(&mut self, base: usize, size: usize) -> Result<()> {
         let parent_region = self
             .parent_iter()
             .find(|parent| parent.range().contains(&base));
@@ -337,8 +342,12 @@ where
         Ok(())
     }
 
-    pub fn space(&self) -> usize {
+    fn space(&self) -> usize {
         self.iter().map(|x| x.size).sum()
+    }
+
+    fn total_space(&self) -> usize {
+        self.parent_iter().map(|x| x.size).sum()
     }
 }
 

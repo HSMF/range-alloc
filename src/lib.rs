@@ -6,6 +6,19 @@ use core::panic;
 
 pub use linear::RangeAllocator;
 
+pub trait RangeAlloc {
+    type Tag;
+    fn add_range(&mut self, base: usize, size: usize, range_tag: Self::Tag) -> Result<()>;
+
+    fn alloc(&mut self, min_size: usize, alignment: usize) -> Result<(Self::Tag, usize)>;
+
+    fn free(&mut self, base: usize, size: usize) -> Result<()>;
+
+    fn total_space(&self) -> usize;
+
+    fn space(&self) -> usize;
+}
+
 #[derive(Debug)]
 pub struct Error;
 
@@ -39,25 +52,30 @@ pub mod tests {
 
     use super::*;
 
-    pub fn setup() -> RangeAllocator<()> {
-        let mut a: RangeAllocator<()> = RangeAllocator::new();
+    pub fn new_linear() -> linear::RangeAllocator<()> {
+        linear::RangeAllocator::new()
+    }
+
+    pub fn new_btree() -> btree::RangeAllocator<()> {
+        btree::RangeAllocator::new()
+    }
+
+    pub fn setup(a: &mut impl RangeAlloc<Tag = ()>) {
         a.add_range(0x7ff000, 4096 * 4096, ())
             .expect("can add range");
 
         a.add_range(0xfff0000, 4096 * 128, ())
             .expect("can add range");
-
-        a
     }
 
-    pub fn alloc_aligned(a: &mut RangeAllocator<()>) {
+    pub fn alloc_aligned(a: &mut impl RangeAlloc<Tag = ()>) {
         let (_, x) = a.alloc(black_box(4096), 4096 * 4096).expect("can allocate");
         let (_, y) = a.alloc(black_box(4096), 4096 * 4096).expect("can allocate");
         a.free(x, 4096).expect("can free again");
         a.free(y, 4096).expect("can free again");
     }
 
-    pub fn alloc_different_configurations(a: &mut RangeAllocator<()>) {
+    pub fn alloc_different_configurations(a: &mut impl RangeAlloc<Tag = ()>) {
         const N: usize = 50;
 
         let sizes = [10, 3, 5, 6, 2, 9, 1, 4, 8, 7].map(|x| x * 4096);
@@ -115,15 +133,29 @@ pub mod tests {
         }
     }
 
-    #[test]
-    fn alloc_2_aligned() {
-        let mut a = setup();
-        tests::alloc_aligned(&mut a);
+    macro_rules! both_tests {
+        ($linear:ident, $btree:ident, $a:ident => $case:expr) => {
+            #[test]
+            fn $linear() {
+                let mut $a: linear::RangeAllocator<()> = new_linear();
+                $case
+            }
+
+            #[test]
+            fn $btree() {
+                let mut $a: btree::RangeAllocator<()> = new_btree();
+                $case
+            }
+        };
     }
 
-    #[test]
-    fn test_alloc_different_configurations() {
-        let mut a = setup();
+    both_tests!(linear_alloc_2_aligned, btree_alloc_2_aligned, a => {
+        setup(&mut a);
+        tests::alloc_aligned(&mut a);
+    });
+
+    both_tests!(linear_alloc_different_configurations, btree_alloc_different_configurations, a => {
+        setup(&mut a);
         tests::alloc_different_configurations(&mut a);
-    }
+    });
 }

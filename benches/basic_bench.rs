@@ -1,10 +1,12 @@
 use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use range_alloc::tests;
+use range_alloc::{RangeAlloc, tests};
 
 fn repeatedly_alloc_page(c: &mut Criterion) {
-    let mut a = tests::setup();
+    let mut a = tests::new_linear();
+    tests::setup(&mut a);
+
     c.bench_function("alloc-and-immediately-free", |b| {
         b.iter(|| {
             let (_, x) = a.alloc(black_box(4096), 4096).expect("can allocate");
