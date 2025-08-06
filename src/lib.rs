@@ -51,7 +51,11 @@ macro_rules! round_up {
 
 // #[cfg(test)]
 pub mod tests {
-    use std::hint::black_box;
+    use std::{
+        collections::{HashMap, HashSet},
+        hint::black_box,
+        ops::Range,
+    };
 
     use super::*;
 
@@ -189,4 +193,110 @@ pub mod tests {
         setup(&mut a);
         tests::alloc_different_configurations(&mut a);
     });
+
+    fn overlap(a: (usize, usize), b: (usize, usize)) -> bool {
+        if a.0 < b.0 {
+            a.0 + a.1 > b.0
+        } else {
+            b.0 + b.1 > a.0
+        }
+    }
+
+    fn run_trace(mut a: impl RangeAlloc<Tag = u64>, trace: &str) {
+        // add <region-id> <start> <size>
+        // alloc <allocation-id> <size> <alignment> fail
+        // free <allocation-id>
+
+        let mut regions = HashSet::new();
+        let mut allocations = HashMap::new();
+
+        let mut errors = 0;
+        let mut error = |msg: &dyn std::fmt::Display| {
+            errors += 1;
+            eprintln!("{msg}")
+        };
+
+        for line in trace.lines() {
+            let mut l = line.split_whitespace();
+            let Some(cmd) = l.next() else { continue };
+
+            macro_rules! next_int {
+                (let $f:ident <- $l:expr) => {
+                    let $f = $l
+                        .next()
+                        .expect(concat!("has ", stringify!($f)))
+                        .parse::<u64>()
+                        .expect(concat!(stringify!($f), " is u64"));
+                };
+            }
+
+            match cmd {
+                "add" => {
+                    next_int!(let region_id <- l);
+                    next_int!(let start <- l);
+                    next_int!(let size <- l);
+                    assert!(regions.insert(region_id), "duplicate region id {region_id}");
+
+                    a.add_range(
+                        start.try_into().unwrap(),
+                        size.try_into().unwrap(),
+                        region_id,
+                    );
+                }
+                "alloc" => {
+                    next_int!(let allocation_id <- l);
+                    next_int!(let size <- l);
+                    next_int!(let alignment <- l);
+                    let fail = l.next().is_some_and(|x| x == "fail");
+
+                    let size = size.try_into().unwrap();
+                    // maybe instead of failing on error we should keep going, it can be caused by
+                    // a suboptimal allocator, which is not necessarily incorrect
+                    match a.alloc(size, alignment.try_into().unwrap()) {
+                        Err(_) if fail => {}
+                        Err(e) => error(&"unexpected error {e:?} {line}"),
+                        Ok(_) if fail => error(&"did not expect to succeed"),
+                        Ok((tag, base)) => {
+                            assert!(
+                                regions.contains(&tag),
+                                "tag {tag} was not added to allocator"
+                            );
+                            allocations.insert(allocation_id, (base, size));
+
+                            for (id, &other) in allocations.iter() {
+                                if *id == allocation_id {
+                                    continue;
+                                }
+                                assert!(!overlap((base, size), other));
+                            }
+                        }
+                    }
+                }
+                "free" => {
+                    next_int!(let allocation_id <- l);
+
+                    let Some((base, size)) = allocations.remove(&allocation_id) else {
+                        continue;
+                    };
+
+                    a.free(base, size).expect("can free");
+                }
+                _ => core::panic!("unknown command {cmd}"),
+            }
+        }
+    }
+
+    macro_rules! trace_test {
+        ($trace:ident) => {
+            #[test]
+            fn $trace() {
+                let a = linear::RangeAllocator::new();
+                run_trace(a, include_str!(concat!("testdata/", stringify!($trace))))
+            }
+        };
+    }
+
+    trace_test!(basic_trace);
+    trace_test!(gen1);
+    trace_test!(gen2);
 }

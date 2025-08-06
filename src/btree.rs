@@ -53,7 +53,7 @@ impl<T: Default> RangeAllocator<T> {
         &self,
         base: usize,
         size: usize,
-    ) -> (Option<EntryWithBase<T>>, Option<EntryWithBase<T>>) {
+    ) -> (Option<EntryWithBase<'_, T>>, Option<EntryWithBase<'_, T>>) {
         (
             self.tree.range(..base).next_back(),
             self.tree.range(base + size..).next(),

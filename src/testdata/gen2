@@ -1,0 +1,206 @@
+add 289153024 289153024 413696
+add 288927744 288927744 225280
+add 288206848 288206848 380928
+add 289861632 289861632 176128
+add 291143680 291143680 241664
+add 290529280 290529280 331776
+alloc 1 481561 4096 
+alloc 2 396026 4096 
+free 1
+alloc 3 379062 12288 
+alloc 4 697879 12288 
+free 4
+alloc 5 797395 12288 
+alloc 6 131222 12288 
+alloc 7 38464 8192 
+free 7
+free 5
+alloc 8 395056 4096 
+free 8
+alloc 9 439088 8192 
+free 9
+free 6
+alloc 10 530413 4096 
+free 10
+alloc 11 112345 12288 
+free 2
+free 3
+alloc 12 1027473 8192 
+alloc 13 598265 12288 
+alloc 14 4780 8192 
+alloc 15 29815 12288 fail
+free 11
+alloc 16 4898 12288 
+alloc 17 64103 8192 
+free 13
+alloc 18 483603 12288 
+alloc 19 93109 8192 
+alloc 20 53897 4096 
+alloc 21 2651 8192 
+alloc 22 1850 4096 
+free 18
+free 12
+alloc 23 1320045 8192 
+free 23
+alloc 24 103070 8192 
+alloc 25 322407 4096 
+free 22
+free 16
+alloc 26 520291 4096 
+free 14
+alloc 27 558806 4096 
+alloc 28 17827 12288 
+free 19
+free 28
+free 15
+alloc 29 7809 12288 
+free 25
+alloc 30 69937 12288 
+alloc 31 288078 12288 
+alloc 32 62505 4096 
+alloc 33 977 4096 
+alloc 34 24684 4096 
+alloc 35 5722 12288 
+alloc 36 4421 4096 
+free 35
+free 26
+free 31
+free 33
+alloc 37 14546 12288 
+free 29
+alloc 38 427761 4096 
+free 24
+alloc 39 302725 12288 
+free 20
+alloc 40 181876 8192 
+free 34
+alloc 41 47143 8192 
+alloc 42 3757 12288 
+alloc 43 26162 4096 
+free 36
+free 21
+alloc 44 9012 8192 
+alloc 45 1239 12288 fail
+alloc 46 606 4096 fail
+free 43
+alloc 47 3670 8192 
+free 32
+alloc 48 1732 12288 
+alloc 49 84246 8192 fail
+alloc 50 1197 12288 fail
+alloc 51 993 8192 fail
+free 42
+free 48
+free 27
+free 44
+alloc 52 245701 12288 
+alloc 53 205023 8192 
+alloc 54 88201 8192 
+alloc 55 1213 8192 
+alloc 56 10377 4096 
+free 50
+alloc 57 19094 4096 
+free 56
+alloc 58 12084 12288 fail
+free 58
+free 37
+free 40
+alloc 59 39011 12288 
+alloc 60 46098 8192 
+free 57
+alloc 61 16535 8192 
+free 60
+alloc 62 41464 12288 
+free 51
+alloc 63 131314 8192 fail
+free 17
+alloc 64 26953 8192 
+free 54
+alloc 65 4112 12288 
+free 39
+alloc 66 257330 8192 
+free 45
+alloc 67 135985 12288 
+free 46
+free 30
+free 66
+alloc 68 177812 8192 
+free 41
+free 64
+free 61
+free 59
+free 38
+alloc 69 8929 4096 
+free 53
+free 68
+alloc 70 84184 12288 
+alloc 71 662037 8192 
+alloc 72 302043 8192 
+free 63
+alloc 73 106813 8192 
+alloc 74 10385 8192 
+free 69
+free 72
+free 74
+alloc 75 81403 4096 
+alloc 76 142342 12288 
+alloc 77 123177 4096 
+alloc 78 42299 8192 
+alloc 79 1557 12288 
+free 75
+alloc 80 994 4096 
+alloc 81 91688 4096 fail
+alloc 82 1353 8192 fail
+alloc 83 499 8192 fail
+free 62
+alloc 84 27192 8192 
+alloc 85 12156 12288 fail
+alloc 86 1106 4096 fail
+alloc 87 893 4096 fail
+alloc 88 350 4096 fail
+alloc 89 1 12288 fail
+free 49
+free 67
+alloc 90 169466 12288 
+free 76
+alloc 91 71513 4096 
+free 86
+free 52
+alloc 92 229839 4096 
+free 83
+alloc 93 46975 4096 
+free 84
+alloc 94 9450 8192 
+alloc 95 65079 8192 
+alloc 96 42932 8192 fail
+free 93
+alloc 97 46907 8192 fail
+free 65
+free 87
+alloc 98 3381 12288 fail
+alloc 99 3273 12288 fail
+alloc 100 174 4096 fail
+alloc 101 39 12288 fail
+alloc 102 12 8192 fail
+free 98
+alloc 103 2696 8192 fail
+free 103
+free 85
+free 94
+alloc 104 6799 8192 
+alloc 105 2456 12288 
+alloc 106 7698 12288 
+free 95
+free 97
+free 55
+alloc 107 22924 8192 
+alloc 108 45787 8192 
+free 100
+free 70
+free 82
+free 96
+alloc 109 39589 4096 
+alloc 110 56408 12288 
+free 99
+free 107
+alloc 111 101952 4096 
