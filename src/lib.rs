@@ -19,14 +19,17 @@ pub trait RangeAlloc {
     fn space(&self) -> usize;
 }
 
+// TODO: this should obviously not just be a string. For sketching this is enough
 #[derive(Debug)]
-pub struct Error;
+pub struct Error(String);
 
 impl Error {
     #[track_caller]
     pub fn cause(msg: &str) -> Error {
-        eprintln!("{} returning error: {msg}", panic::Location::caller());
-        Error
+        Error(format!(
+            "{} returning error: {msg}",
+            panic::Location::caller()
+        ))
     }
 
     #[track_caller]
@@ -68,6 +71,30 @@ pub mod tests {
             .expect("can add range");
     }
 
+    /// allocate n times from a, picking the sizes and alignments from `sizes` and `alignments`
+    /// both iterators are made to wrap around
+    pub fn allocate_n(
+        a: &mut impl RangeAlloc<Tag = ()>,
+        sizes: impl Iterator<Item = usize> + Clone,
+        alignments: impl Iterator<Item = usize> + Clone,
+        n: usize,
+    ) -> Vec<(usize, usize)> {
+        let mut sizes = sizes.cycle();
+        let mut alignments = alignments.cycle();
+
+        let mut positions = Vec::with_capacity(n);
+        for _ in 0..n {
+            let size = sizes.next().unwrap();
+            let Ok((_, x)) = a.alloc(size, alignments.next().unwrap()) else {
+                continue;
+            };
+
+            positions.push((x, size));
+        }
+
+        positions
+    }
+
     pub fn alloc_aligned(a: &mut impl RangeAlloc<Tag = ()>) {
         let (_, x) = a.alloc(black_box(4096), 4096 * 4096).expect("can allocate");
         let (_, y) = a.alloc(black_box(4096), 4096 * 4096).expect("can allocate");
@@ -76,7 +103,7 @@ pub mod tests {
     }
 
     pub fn alloc_different_configurations(a: &mut impl RangeAlloc<Tag = ()>) {
-        const N: usize = 50;
+        const N: usize = 500;
 
         let sizes = [10, 3, 5, 6, 2, 9, 1, 4, 8, 7].map(|x| x * 4096);
         let alignments = [8, 2, 9, 1, 3, 0, 6, 5, 7].map(|x| 4096 << x);
@@ -88,14 +115,18 @@ pub mod tests {
 
         for pos in positions.iter_mut() {
             let size = sizes.next().unwrap();
-            let (_, x) = a
-                .alloc(size, alignments.next().unwrap())
-                .expect("can allocate");
+            let Ok((_, x)) = a.alloc(size, alignments.next().unwrap()) else {
+                continue;
+            };
+            // .expect("can allocate");
 
             *pos = (x, size);
         }
 
         for pos in positions {
+            if pos.0 == 0 {
+                continue;
+            }
             a.free(pos.0, pos.1).expect("can free");
         }
     }

@@ -1,6 +1,6 @@
 use std::hint::black_box;
 
-use criterion::{Criterion, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use range_alloc::{RangeAlloc, tests};
 
 fn repeatedly_alloc_page(c: &mut Criterion) {
@@ -34,6 +34,39 @@ fn repeatedly_alloc_page(c: &mut Criterion) {
             tests::alloc_different_configurations(&mut a);
         });
     });
+
+    macro_rules! compare {
+        ($group:expr, $alloc:ident => $setup:expr ; $e:expr) => {{
+            let mut group = c.benchmark_group($group);
+
+            let mut $alloc = tests::new_linear();
+            $setup;
+            group.bench_function(BenchmarkId::new("linear", 1), |b| {
+                b.iter(|| $e);
+            });
+
+            let mut $alloc = tests::new_btree();
+            $setup;
+            group.bench_function(BenchmarkId::new("btree", 1), |b| {
+                b.iter(|| $e);
+            });
+        }};
+    }
+
+    compare!("alloc_different_configurations", a => tests::setup(&mut a); tests::alloc_different_configurations(&mut a));
+    compare!("alloc_aligned", a => {
+        a.add_range(0x7ff000, 4096 * 4096, ())
+            .expect("can add range");
+
+        a.add_range(0xfff0000, 4096 * 128, ())
+            .expect("can add range");
+
+        a.add_range(0xffff0000, 4096 * 4096 * 4096, ())
+            .expect("can add range");
+        let alignments = [8, 2, 9, 1, 3, 0, 6, 5, 7].map(|x| 4096 << x);
+        tests::allocate_n(&mut a, std::iter::once(4096), alignments.into_iter(), 50000);
+        // panic!("{:?} / {:?}", a.space(), a.total_space());
+    }; tests::alloc_aligned(&mut a));
 }
 
 criterion_group!(benches, repeatedly_alloc_page);
