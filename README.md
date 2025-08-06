@@ -22,4 +22,5 @@ cargo +nightly miri test
 Benchmarks
 ```sh
 cargo bench
+cargo bench --bench basic_bench -- --profile-time=5
 ```

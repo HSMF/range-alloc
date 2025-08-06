@@ -1,3 +1,4 @@
+use pprof::criterion::{Output, PProfProfiler};
 use std::hint::black_box;
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
@@ -69,5 +70,10 @@ fn repeatedly_alloc_page(c: &mut Criterion) {
     }; tests::alloc_aligned(&mut a));
 }
 
-criterion_group!(benches, repeatedly_alloc_page);
+criterion_group!(
+    name=benches;
+    config = Criterion::default().with_profiler(PProfProfiler::new(100, Output::Flamegraph(None)));
+    targets=repeatedly_alloc_page
+
+);
 criterion_main!(benches);
