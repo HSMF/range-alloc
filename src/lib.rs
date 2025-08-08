@@ -1,5 +1,6 @@
 #![allow(unused)]
 mod btree;
+pub mod collections;
 mod linear;
 
 use core::panic;
