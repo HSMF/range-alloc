@@ -10,6 +10,7 @@ tinyvec = "1.9.0"
 [dev-dependencies]
 criterion = { version = "0.5.1", features = ["html_reports"] }
 pprof = { version = "0.15.0", features = ["flamegraph", "criterion"] }
+proptest = "1.7.0"
 
 [[bench]]
 name = "basic_bench"
