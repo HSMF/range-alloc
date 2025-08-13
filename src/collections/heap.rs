@@ -426,13 +426,12 @@ impl<T> Drop for Heap<T> {
         };
 
         let mut cur = Some(left);
+
         while let Some(mut node) = cur {
-            cur = unsafe { node.as_mut().next_node_mut() };
-            if let Some(mut cur) = cur {
-                unsafe { cur.as_mut().parent = node.as_ref().parent };
-            }
+            let next = unsafe { node.as_mut().next_node_mut() };
 
             let _ = unsafe { Box::from_raw(node.as_ptr()) };
+            cur = next;
         }
     }
 }
@@ -498,6 +497,72 @@ mod tests {
     use crate::collections::heap::Heap;
 
     #[test]
+    fn new_heap_is_empty() {
+        let mut heap: Heap<i32> = Heap::new();
+        assert_eq!(heap.len(), 0);
+        assert_eq!(heap.pop(), None);
+    }
+
+    #[test]
+    fn insert_increases_len() {
+        let mut heap = Heap::new();
+        heap.insert(10);
+        assert_eq!(heap.len(), 1);
+        heap.insert(5);
+        assert_eq!(heap.len(), 2);
+    }
+
+    #[test]
+    fn pop_returns_maximum() {
+        let mut heap = Heap::new();
+        heap.insert(1);
+        heap.insert(10);
+        heap.insert(5);
+
+        assert_eq!(heap.pop(), Some(10));
+        assert_eq!(heap.pop(), Some(5));
+        assert_eq!(heap.pop(), Some(1));
+        assert_eq!(heap.pop(), None);
+    }
+
+    #[test]
+    fn pop_reduces_len() {
+        let mut heap = Heap::new();
+        heap.insert(3);
+        heap.insert(7);
+
+        heap.pop();
+        assert_eq!(heap.len(), 1);
+        heap.pop();
+        assert_eq!(heap.len(), 0);
+    }
+
+    #[test]
+    fn handles_duplicate_values() {
+        let mut heap = Heap::new();
+        heap.insert(5);
+        heap.insert(5);
+        heap.insert(5);
+
+        assert_eq!(heap.pop(), Some(5));
+        assert_eq!(heap.pop(), Some(5));
+        assert_eq!(heap.pop(), Some(5));
+        assert_eq!(heap.pop(), None);
+    }
+
+    #[test]
+    fn works_with_negative_numbers() {
+        let mut heap = Heap::new();
+        heap.insert(-10);
+        heap.insert(-1);
+        heap.insert(-5);
+
+        assert_eq!(heap.pop(), Some(-1));
+        assert_eq!(heap.pop(), Some(-5));
+        assert_eq!(heap.pop(), Some(-10));
+    }
+
+    #[test]
     fn it_works() {
         let mut h = Heap::new();
         h.insert(1);
@@ -515,5 +580,28 @@ mod tests {
         let mut h = Heap::new();
         h.insert(1);
         drop(h);
+    }
+
+    use proptest::prelude::*;
+    proptest! {
+        #[cfg_attr(miri, ignore)]
+        #[test]
+        fn heap_pops_in_sorted_order(xs in proptest::collection::vec(any::<i32>(), 0..100)) {
+            let mut heap = Heap::new();
+            for x in &xs {
+                heap.insert(*x);
+            }
+
+            let mut elems = Vec::with_capacity(xs.len());
+            while let Some(v) = heap.pop() {
+                elems.push(v);
+            }
+
+            // Check length matches
+            prop_assert_eq!(elems.len(), xs.len());
+
+            // Ensure it's sorted in non-increasing order
+            prop_assert!(elems.windows(2).all(|w| w[0] >= w[1]));
+        }
     }
 }
