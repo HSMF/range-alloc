@@ -37,7 +37,10 @@ impl<T> Node<T> {
 }
 
 impl<T: fmt::Debug> Heap<T> {
-    fn swap_parent_child(&mut self, parent: &mut Node<T>, child: &mut Node<T>) {
+    fn swap_parent_child(&mut self, parent: NonNull<Node<T>>, child: NonNull<Node<T>>) {
+        let mut parentp = parent;
+        let mut childp = child;
+        let (parent, child) = unsafe { (parentp.as_mut(), childp.as_mut()) };
         let parent_is_left_child = parent.parent.is_some_and(|grandparent| unsafe {
             addr_eq(as_ptr(grandparent.as_ref().left), parent)
         });
@@ -46,42 +49,59 @@ impl<T: fmt::Debug> Heap<T> {
         use core::mem::swap;
 
         child.parent = parent.parent;
-        parent.parent = NonNull::new(child);
+        parent.parent = Some(childp);
 
         if child_is_left_child {
             swap(&mut child.right, &mut parent.right);
             parent.left = child.left;
-            child.left = NonNull::new(parent);
+            child.left = Some(parentp);
+            if let Some(mut right) = child.right {
+                unsafe { right.as_mut().parent = Some(childp) };
+            }
         } else {
             swap(&mut child.left, &mut parent.left);
             parent.right = child.right;
-            child.right = NonNull::new(parent);
+            child.right = Some(parentp);
+            if let Some(mut left) = child.left {
+                unsafe { left.as_mut().parent = Some(childp) };
+            }
+        }
+
+        if let Some(mut left) = parent.left {
+            unsafe { left.as_mut().parent = Some(parentp) };
+        }
+
+        if let Some(mut right) = parent.right {
+            unsafe { right.as_mut().parent = Some(parentp) };
         }
 
         if let Some(mut grandparent) = child.parent {
             let grandparent = unsafe { grandparent.as_mut() };
             if parent_is_left_child {
-                grandparent.left = NonNull::new(child);
+                grandparent.left = Some(childp);
             } else {
-                grandparent.right = NonNull::new(child);
+                grandparent.right = Some(childp);
             }
         }
     }
 
-    fn swap(&mut self, a: &mut Node<T>, b: &mut Node<T>) {
+    fn swap(&mut self, a: NonNull<Node<T>>, b: NonNull<Node<T>>) {
+        let mut ap = a;
+        let mut bp = b;
+        let (a, b) = unsafe { (ap.as_ref(), bp.as_ref()) };
         if addr_eq(as_ptr(a.parent), b) {
-            println!("b is parent");
-            self.swap_parent_child(b, a);
-            if a.parent.is_none() {
-                self.root = NonNull::new(a);
+            let is_root = b.parent.is_none();
+            self.swap_parent_child(bp, ap);
+            if is_root {
+                self.root = Some(ap);
             }
             return;
         }
         if addr_eq(as_ptr(b.parent), a) {
-            println!("a is parent");
-            self.swap_parent_child(a, b);
-            if b.parent.is_none() {
-                self.root = NonNull::new(b);
+            let is_root = a.parent.is_none();
+            self.swap_parent_child(ap, bp);
+            if is_root {
+                self.root = Some(bp);
             }
             return;
         }
@@ -95,6 +115,7 @@ impl<T: fmt::Debug> Heap<T> {
 
         use core::mem::swap;
 
+        let (a, b) = unsafe { (ap.as_mut(), bp.as_mut()) };
         swap(&mut a.left, &mut b.left);
         swap(&mut a.right, &mut b.right);
         swap(&mut a.parent, &mut b.parent);
@@ -102,9 +123,9 @@ impl<T: fmt::Debug> Heap<T> {
         if let Some(mut parent) = b.parent {
             unsafe {
                 if a_is_left_child {
-                    parent.as_mut().left = NonNull::new(b)
+                    parent.as_mut().left = Some(bp)
                 } else {
-                    parent.as_mut().right = NonNull::new(b)
+                    parent.as_mut().right = Some(bp)
                 }
             }
         }
@@ -112,25 +133,25 @@ impl<T: fmt::Debug> Heap<T> {
         if let Some(mut parent) = a.parent {
             unsafe {
                 if b_is_left_child {
-                    parent.as_mut().left = NonNull::new(a)
+                    parent.as_mut().left = Some(ap)
                 } else {
-                    parent.as_mut().right = NonNull::new(a)
+                    parent.as_mut().right = Some(ap)
                 }
             }
         }
 
         macro_rules! link_child {
-            ($el:expr, $field:ident) => {
+            ($el:expr, $p:expr, $field:ident) => {
                 if let Some(mut child) = $el.$field {
-                    unsafe { child.as_mut().parent = NonNull::new($el) };
+                    unsafe { child.as_mut().parent = Some($p) };
                 }
             };
         }
 
-        link_child!(a, left);
-        link_child!(a, right);
-        link_child!(b, left);
-        link_child!(b, right);
+        link_child!(a, ap, left);
+        link_child!(a, ap, right);
+        link_child!(b, bp, left);
+        link_child!(b, bp, right);
 
         if a.parent.is_none() {
             self.root = NonNull::new(a);
@@ -252,7 +273,7 @@ impl<T: fmt::Debug> Heap<T> {
         Some(cur)
     }
 
-    fn remove_leaf(&mut self, last: NonNull<Node<T>>) -> Box<Node<T>> {
+    fn remove_leaf(&mut self, last: NonNull<Node<T>>) {
         if let Some(mut parent) = unsafe { last.as_ref().parent } {
             let parent = unsafe { parent.as_mut() };
             if addr_eq(as_ptr(parent.left), last.as_ptr()) {
@@ -262,39 +283,31 @@ impl<T: fmt::Debug> Heap<T> {
                 parent.right = None;
             }
         } else {
-            eprintln!("{self:?}");
             assert_eq!(self.len, 1);
             self.root = None;
         };
         self.len -= 1;
-
-        unsafe { Box::from_raw(last.as_ptr()) }
     }
 }
 
 impl<T: Ord + fmt::Debug> Heap<T> {
     pub fn insert(&mut self, v: T) {
-        println!("{self:?}");
         let mut new = self.insert_at_bottom(v);
-        let mut new = unsafe { new.as_mut() };
-
-        println!("{new:?}");
+        // let mut new = unsafe { new.as_mut() };
 
         loop {
-            let Some(mut parent) = new.parent else {
+            let (newp, new) = unsafe { (new, new.as_ref()) };
+            let Some(mut parentp) = new.parent else {
                 return;
             };
 
-            let parent = unsafe { parent.as_mut() };
+            let parent = unsafe { parentp.as_mut() };
 
             if parent.value > new.value {
                 return;
             }
 
-            self.swap(parent, new);
-            println!("new {new:?}");
-            println!("parent {parent:?}");
-            println!("{self:?}");
+            self.swap(parentp, newp);
             // core::mem::swap(&mut parent.value, &mut new.value);
 
             // new = parent;
@@ -313,31 +326,27 @@ impl<T: Ord + fmt::Debug> Heap<T> {
 
         if addr_eq(replacement.as_ptr(), node.as_ptr()) {
             // removing a leaf (in this case root) is cheap
-            let last = self.remove_leaf(replacement);
+            self.remove_leaf(replacement);
 
+            let last = unsafe { Box::from_raw(node.as_ptr()) };
             return Some(last.value);
         }
 
         // from now on, node and last are definitely different
         // so it should be safe to construct a mutable reference
 
-        {
-            let node = unsafe { node.as_mut() };
-            let replacement = unsafe { replacement.as_mut() };
-            self.swap(node, replacement);
-            println!("node@{:?} {node:?}", node as *mut _);
-            println!("replacement@{:?} {replacement:?}", replacement as *mut _);
-            // core::mem::swap(&mut node.value, &mut last.value);
-        }
+        self.swap(node, replacement);
 
-        let last = self.remove_leaf(node);
+        self.remove_leaf(node);
 
         if self.root.is_none() {
+            let last = unsafe { Box::from_raw(node.as_ptr()) };
             return Some(last.value);
         }
 
-        self.heapify_down(node);
+        self.heapify_down(replacement);
 
+        let last = unsafe { Box::from_raw(node.as_ptr()) };
         Some(last.value)
     }
 
@@ -349,28 +358,18 @@ impl<T: Ord + fmt::Debug> Heap<T> {
         let mut cur = node;
         loop {
             let curr = unsafe { cur.as_ref() };
-            macro_rules! one_child_none {
-                ($cur:expr, $child:expr) => {
-                    let cur = unsafe { $cur.as_mut() };
-                    let child = unsafe { $child.as_mut() };
-                    if child.value < cur.value {
+            let (mut left, mut right) = match (curr.left, curr.right) {
+                (None, None) => return,
+                (None, Some(mut child)) | (Some(mut child), None) => {
+                    let cur_r = unsafe { cur.as_ref() };
+                    let child_r = unsafe { child.as_ref() };
+                    if child_r.value < cur_r.value {
                         return;
                     }
-
                     self.swap(child, cur);
-                    // $cur = $child;
-                };
-            }
-            let Some(mut left) = curr.left else {
-                let Some(mut child) = curr.right else {
-                    return;
-                };
-                one_child_none!(cur, child);
-                continue;
-            };
-            let Some(mut right) = curr.right else {
-                one_child_none!(cur, left);
-                continue;
+                    continue;
+                }
+                (Some(left), Some(right)) => (left, right),
             };
 
             let right_r = unsafe { right.as_ref() };
@@ -386,12 +385,7 @@ impl<T: Ord + fmt::Debug> Heap<T> {
                 left
             };
 
-            {
-                let max = unsafe { max_child.as_mut() };
-                let curr = unsafe { cur.as_mut() };
-                self.swap(curr, max);
-            };
-            // cur = max_child;
+            self.swap(cur, max_child);
         }
     }
 }
@@ -452,8 +446,10 @@ impl<T: fmt::Debug> fmt::Debug for Heap<T> {
             f: &mut std::fmt::Formatter<'_>,
         ) -> Result<u64, fmt::Error> {
             let me = *nextid;
+            let me = node as *const _ as usize as u64;
             *nextid += 1;
             if lim == 0 {
+                writeln!(f, "// warning! recursion depth exceeded")?;
                 return Ok(me);
             }
 
@@ -462,6 +458,14 @@ impl<T: fmt::Debug> fmt::Debug for Heap<T> {
                 r#"node{me} [label="{{{{{:?}}}|{{<l>|<r>}}}}"]"#,
                 node.value
             )?;
+
+            if let Some(parent) = node.parent {
+                writeln!(
+                    f,
+                    "node{me} -> node{} [color=red]",
+                    parent.as_ptr() as usize as u64
+                );
+            }
 
             if let Some(left) = node.left {
                 let left = unsafe { left.as_ref() };
@@ -495,25 +499,15 @@ mod tests {
 
     #[test]
     fn it_works() {
-        println!("here {}", line!());
         let mut h = Heap::new();
-        println!("here {}", line!());
         h.insert(1);
-        println!("here {}", line!());
         h.insert(2);
-        println!("here {}", line!());
         h.insert(0);
-        println!("here {}", line!());
 
-        println!("here {} {h:?}", line!());
         assert_eq!(h.pop(), Some(2));
-        println!("here {} {h:?}", line!());
         assert_eq!(h.pop(), Some(1));
-        println!("here {}", line!());
         assert_eq!(h.pop(), Some(0));
-        println!("here {}", line!());
         assert_eq!(h.pop(), None);
-        println!("here {}", line!());
     }
 
     #[test]
