@@ -288,6 +288,10 @@ impl<T: fmt::Debug> Heap<T> {
         };
         self.len -= 1;
     }
+
+    fn iter_ptr(&mut self) -> HeapIter<'_, T> {
+        HeapIter { heap: self, i: 0 }
+    }
 }
 
 impl<T: Ord + fmt::Debug> Heap<T> {
@@ -411,28 +415,48 @@ impl<T> Node<T> {
 
     fn next_node_mut(&mut self) -> Link<T> {
         if let Some(mut right) = self.right {
-            unsafe { right.as_mut().get_leftmost() }
-        } else {
-            self.parent
+            return unsafe { right.as_mut().get_leftmost() };
+        }
+        let mut cur = self;
+        loop {
+            let mut next = cur.parent?;
+            if addr_eq(as_ptr(unsafe { next.as_mut() }.left), cur) {
+                return Some(next);
+            }
         }
     }
 }
 
 impl<T> Drop for Heap<T> {
     fn drop(&mut self) {
+        // uses O(n) memory... can we avoid this?
         let Some(mut root) = self.root else { return };
-        let Some(left) = (unsafe { root.as_mut().get_leftmost() }) else {
-            return;
-        };
 
-        let mut cur = Some(left);
-
-        while let Some(mut node) = cur {
-            let next = unsafe { node.as_mut().next_node_mut() };
-
+        fn free<T>(node: NonNull<Node<T>>) {
+            if let Some(left) = unsafe { node.as_ref().left } {
+                free(left)
+            }
+            if let Some(right) = unsafe { node.as_ref().right } {
+                free(right)
+            }
             let _ = unsafe { Box::from_raw(node.as_ptr()) };
-            cur = next;
         }
+
+        if let Some(root) = self.root {
+            free(root)
+        }
+        // let Some(left) = (unsafe { root.as_mut().get_leftmost() }) else {
+        //     return;
+        // };
+        //
+        // let mut cur = Some(left);
+        //
+        // while let Some(mut node) = cur {
+        //     let next = unsafe { node.as_mut().next_node_mut() };
+        //     let _ = unsafe { Box::from_raw(node.as_ptr()) };
+        //     println!("done with {cur:?}, onto {next:?}");
+        //     cur = next;
+        // }
     }
 }
 
@@ -454,14 +478,14 @@ impl<T: fmt::Debug> fmt::Debug for Heap<T> {
 
             writeln!(
                 f,
-                r#"node{me} [label="{{{{{:?}}}|{{<l>|<r>}}}}"]"#,
+                r#"node{me:x} [label="{{{{{:?}}}|{{<l>|<r>}}}}"]"#,
                 node.value
             )?;
 
             if let Some(parent) = node.parent {
                 writeln!(
                     f,
-                    "node{me} -> node{} [color=red]",
+                    "node{me:x} -> node{:x} [color=red]",
                     parent.as_ptr() as usize as u64
                 );
             }
@@ -469,13 +493,13 @@ impl<T: fmt::Debug> fmt::Debug for Heap<T> {
             if let Some(left) = node.left {
                 let left = unsafe { left.as_ref() };
                 let i = inner(left, nextid, lim - 1, f)?;
-                writeln!(f, "node{me}:l -> node{i};")?;
+                writeln!(f, "node{me:x}:l -> node{i:x};")?;
             }
 
             if let Some(right) = node.right {
                 let right = unsafe { right.as_ref() };
                 let i = inner(right, nextid, lim - 1, f)?;
-                writeln!(f, "node{me}:r -> node{i};")?;
+                writeln!(f, "node{me:x}:r -> node{i:x};")?;
             }
 
             Ok(me)
@@ -489,6 +513,21 @@ impl<T: fmt::Debug> fmt::Debug for Heap<T> {
         writeln!(f, "}}")?;
 
         Ok(())
+    }
+}
+
+struct HeapIter<'a, T> {
+    heap: &'a mut Heap<T>,
+    i: usize,
+}
+
+impl<'a, T: fmt::Debug> Iterator for HeapIter<'a, T> {
+    type Item = NonNull<Node<T>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let n = self.heap.get_node_at_mut(self.i);
+        self.i += 1;
+        n
     }
 }
 
@@ -603,5 +642,19 @@ mod tests {
             // Ensure it's sorted in non-increasing order
             prop_assert!(elems.windows(2).all(|w| w[0] >= w[1]));
         }
+    }
+
+    #[test]
+    fn iter() {
+        let mut heap = Heap::new();
+
+        heap.insert(1);
+        heap.insert(2);
+        heap.insert(0);
+
+        let mut it = heap.iter_ptr();
+        unsafe { assert_eq!(it.next().unwrap().as_ref().value, 2) }
+        unsafe { assert_eq!(it.next().unwrap().as_ref().value, 1) }
+        unsafe { assert_eq!(it.next().unwrap().as_ref().value, 0) }
     }
 }
